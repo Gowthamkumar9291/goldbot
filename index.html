@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="GoldBot"/>
+<meta name="theme-color" content="#D4A017"/>
+<meta name="description" content="Automated XAU/USD trading bot via OANDA API"/>
+<link rel="manifest" href="manifest.json"/>
+<link rel="apple-touch-icon" href="icons/icon-192.svg"/>
+<title>GoldBot — XAU/USD</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+  :root {
+    --gold:#D4A017;--gold-lt:#F5C842;--gold-dk:#8B6800;
+    --bg:#0C0C0E;--surface:#141418;--surface2:#1C1C22;
+    --border:#2A2A34;--text:#F0EDE6;--muted:#7A7A8C;
+    --green:#2ECC71;--red:#E74C3C;
+    --mono:'Space Mono',monospace;--sans:'Space Grotesk',sans-serif;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+  html{height:100%;}
+  body{
+    background:var(--bg);color:var(--text);font-family:var(--sans);
+    min-height:100vh;max-width:480px;margin:0 auto;
+    padding:0 0 calc(80px + var(--safe-bottom));
+    -webkit-tap-highlight-color:transparent;
+    overscroll-behavior:none;
+  }
+  /* Splash screen */
+  #splash{
+    position:fixed;inset:0;background:var(--bg);z-index:999;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;
+    transition:opacity .5s;
+  }
+  #splash.hidden{opacity:0;pointer-events:none;}
+  .splash-icon{font-size:64px;filter:drop-shadow(0 0 24px rgba(212,160,23,.5));animation:float 3s ease-in-out infinite;}
+  @keyframes float{0%,100%{transform:translateY(0);}50%{transform:translateY(-10px);}}
+  .splash-title{font-size:28px;font-weight:700;letter-spacing:.04em;}
+  .splash-title span{color:var(--gold);}
+  .splash-sub{font-size:13px;color:var(--muted);}
+  .splash-bar{width:120px;height:2px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:8px;}
+  .splash-progress{height:100%;background:linear-gradient(90deg,var(--gold),var(--gold-lt));width:0%;transition:width .3s;}
+
+  /* Header */
+  .header{
+    background:var(--surface);border-bottom:1px solid var(--border);
+    padding:calc(14px + var(--safe-top)) 20px 14px;
+    position:sticky;top:0;z-index:100;
+    display:flex;align-items:center;justify-content:space-between;
+  }
+  .header-left{display:flex;align-items:center;gap:10px;}
+  .gold-dot{
+    width:10px;height:10px;border-radius:50%;
+    background:var(--gold);box-shadow:0 0 8px var(--gold);
+    animation:pulse 2s infinite;
+  }
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.5;transform:scale(1.3);}}
+  .header h1{font-size:17px;font-weight:700;letter-spacing:.02em;}
+  .header h1 span{color:var(--gold);}
+  .hdr-right{display:flex;align-items:center;gap:8px;}
+  .notif-btn{
+    background:none;border:1px solid var(--border);border-radius:8px;
+    color:var(--muted);font-size:16px;padding:4px 8px;cursor:pointer;
+    transition:all .2s;
+  }
+  .notif-btn.on{border-color:var(--gold);color:var(--gold);}
+  .status-badge{
+    font-family:var(--mono);font-size:10px;padding:3px 8px;
+    border-radius:20px;border:1px solid var(--border);color:var(--muted);letter-spacing:.06em;
+  }
+  .status-badge.running{border-color:var(--gold);color:var(--gold);}
+
+  /* Install banner */
+  #install-banner{
+    margin:12px 20px 0;padding:12px 14px;
+    background:rgba(212,160,23,.08);border:1px solid rgba(212,160,23,.25);
+    border-radius:12px;display:flex;align-items:center;gap:10px;
+  }
+  #install-banner span{font-size:12px;color:var(--gold-lt);flex:1;line-height:1.4;}
+  #install-btn{
+    background:var(--gold);color:#0C0C0E;border:none;
+    border-radius:8px;font-family:var(--sans);font-weight:700;
+    font-size:12px;padding:7px 12px;cursor:pointer;white-space:nowrap;
+  }
+  #install-close{background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:0 4px;}
+
+  /* Setup */
+  #setup-screen{padding:20px 20px;}
+  .setup-hero{text-align:center;padding:24px 0 22px;}
+  .setup-hero .icon{font-size:48px;display:block;margin-bottom:12px;filter:drop-shadow(0 0 16px rgba(212,160,23,.4));}
+  .setup-hero h2{font-size:22px;font-weight:700;margin-bottom:6px;}
+  .setup-hero p{color:var(--muted);font-size:14px;line-height:1.6;}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:14px;}
+  .card-title{font-size:11px;font-weight:600;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;margin-bottom:14px;}
+  label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px;margin-top:12px;}
+  label:first-of-type{margin-top:0;}
+  input[type="text"],input[type="password"],input[type="number"],select{
+    width:100%;background:var(--surface2);border:1px solid var(--border);
+    border-radius:10px;color:var(--text);font-family:var(--mono);font-size:13px;
+    padding:11px 14px;outline:none;transition:border-color .2s;-webkit-appearance:none;
+  }
+  input:focus,select:focus{border-color:var(--gold);}
+  select option{background:var(--surface2);}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .btn{
+    width:100%;padding:15px;border-radius:12px;border:none;
+    font-family:var(--sans);font-size:15px;font-weight:700;
+    cursor:pointer;transition:all .2s;letter-spacing:.02em;
+  }
+  .btn-gold{background:linear-gradient(135deg,var(--gold),var(--gold-lt));color:#0C0C0E;}
+  .btn-gold:active{transform:scale(.97);}
+  .btn-outline{background:transparent;border:1px solid var(--border);color:var(--muted);margin-top:10px;}
+  .btn-red{background:rgba(231,76,60,.15);border:1px solid rgba(231,76,60,.3);color:var(--red);margin-top:10px;}
+  .info-row{
+    display:flex;align-items:center;gap:8px;
+    background:rgba(212,160,23,.08);border:1px solid rgba(212,160,23,.2);
+    border-radius:10px;padding:10px 12px;margin-bottom:16px;
+  }
+  .info-row span{font-size:12px;color:var(--gold-lt);line-height:1.5;}
+  .saved-badge{
+    display:inline-flex;align-items:center;gap:6px;
+    background:rgba(46,204,113,.1);border:1px solid rgba(46,204,113,.2);
+    border-radius:8px;padding:4px 10px;font-size:11px;color:var(--green);
+    margin-bottom:10px;
+  }
+
+  /* Bot screen */
+  #bot-screen{display:none;padding:16px 20px;}
+  .price-hero{
+    text-align:center;padding:20px 0 18px;
+    border-bottom:1px solid var(--border);margin-bottom:16px;
+  }
+  .price-label{font-size:11px;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;margin-bottom:6px;}
+  .price-value{
+    font-family:var(--mono);font-size:38px;font-weight:700;
+    color:var(--gold-lt);letter-spacing:-.01em;line-height:1;
+  }
+  .price-change{font-family:var(--mono);font-size:13px;margin-top:6px;}
+  .price-change.up{color:var(--green);}
+  .price-change.down{color:var(--red);}
+  .signal-card{
+    border-radius:14px;padding:16px 18px;margin-bottom:14px;
+    border:1px solid var(--border);display:flex;align-items:center;gap:14px;
+  }
+  .signal-card.buy{background:rgba(46,204,113,.07);border-color:rgba(46,204,113,.25);}
+  .signal-card.sell{background:rgba(231,76,60,.07);border-color:rgba(231,76,60,.25);}
+  .signal-card.flat{background:var(--surface);}
+  .signal-icon{font-size:28px;}
+  .signal-info{flex:1;}
+  .signal-title{font-size:15px;font-weight:700;margin-bottom:2px;}
+  .signal-card.buy .signal-title{color:var(--green);}
+  .signal-card.sell .signal-title{color:var(--red);}
+  .signal-sub{font-size:12px;color:var(--muted);}
+  .stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
+  .stat-box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;}
+  .stat-label{font-size:10px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;margin-bottom:6px;}
+  .stat-value{font-family:var(--mono);font-size:18px;font-weight:700;}
+  .stat-value.green{color:var(--green);}
+  .stat-value.red{color:var(--red);}
+  .stat-value.gold{color:var(--gold-lt);}
+  .ma-row{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:9px 0;border-bottom:1px solid var(--border);font-size:13px;
+  }
+  .ma-row:last-child{border-bottom:none;}
+  .ma-name{color:var(--muted);}
+  .ma-val{font-family:var(--mono);font-weight:700;}
+  .log-entry{
+    display:flex;align-items:flex-start;gap:10px;
+    padding:10px 0;border-bottom:1px solid var(--border);font-size:12px;
+  }
+  .log-entry:last-child{border-bottom:none;}
+  .log-dot{width:8px;height:8px;border-radius:50%;margin-top:3px;flex-shrink:0;}
+  .log-dot.buy{background:var(--green);}
+  .log-dot.sell{background:var(--red);}
+  .log-dot.info{background:var(--muted);}
+  .log-time{color:var(--muted);font-family:var(--mono);margin-left:auto;white-space:nowrap;}
+  .log-text{flex:1;color:var(--text);line-height:1.4;}
+  .position-card{
+    border-radius:14px;padding:16px 18px;margin-bottom:14px;
+    border:1px solid var(--border);background:var(--surface);
+  }
+  .pos-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
+  .pos-type{font-size:12px;font-weight:700;letter-spacing:.06em;padding:3px 10px;border-radius:20px;}
+  .pos-type.buy{background:rgba(46,204,113,.15);color:var(--green);}
+  .pos-type.sell{background:rgba(231,76,60,.15);color:var(--red);}
+  .pos-pnl{font-family:var(--mono);font-size:16px;font-weight:700;}
+  .pos-details{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .pos-detail{font-size:12px;}
+  .pos-detail span{color:var(--muted);display:block;margin-bottom:2px;font-size:10px;letter-spacing:.06em;text-transform:uppercase;}
+  .next-check{text-align:center;font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:6px;}
+  .error-msg{
+    background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.3);
+    border-radius:10px;padding:10px 14px;font-size:13px;color:var(--red);margin-bottom:12px;
+  }
+</style>
+</head>
+<body>
+
+<!-- Splash -->
+<div id="splash">
+  <div class="splash-icon">⚜️</div>
+  <div class="splash-title">Gold<span>Bot</span></div>
+  <div class="splash-sub">XAU/USD Auto-Trader</div>
+  <div class="splash-bar"><div class="splash-progress" id="splash-prog"></div></div>
+</div>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-left">
+    <div class="gold-dot"></div>
+    <h1>Gold<span>Bot</span></h1>
+  </div>
+  <div class="hdr-right">
+    <button class="notif-btn" id="notif-btn" onclick="toggleNotifications()" title="Notifications">🔔</button>
+    <div class="status-badge" id="hdr-status">SETUP</div>
+  </div>
+</div>
+
+<!-- Install banner (shown when installable) -->
+<div id="install-banner" style="display:none">
+  <span>📲 Add GoldBot to your home screen for the full app experience</span>
+  <button id="install-btn" onclick="installApp()">Install</button>
+  <button id="install-close" onclick="document.getElementById('install-banner').style.display='none'">×</button>
+</div>
+
+<!-- SETUP SCREEN -->
+<div id="setup-screen">
+  <div class="setup-hero">
+    <span class="icon">⚜️</span>
+    <h2>XAU/USD Auto-Trader</h2>
+    <p>Connects to OANDA and trades Gold automatically using a moving average crossover strategy.</p>
+  </div>
+
+  <div id="saved-indicator" style="display:none">
+    <div class="saved-badge">✓ Settings restored from last session</div>
+  </div>
+
+  <div class="info-row">
+    <span>💡 No OANDA account? Sign up free at <strong>oanda.com</strong> — start with a demo account.</span>
+  </div>
+
+  <div class="card">
+    <div class="card-title">OANDA Credentials</div>
+    <label>API Key</label>
+    <input type="password" id="api-key" placeholder="Your OANDA API key" autocomplete="off"/>
+    <label>Account ID</label>
+    <input type="text" id="account-id" placeholder="e.g. 001-001-1234567-001" autocomplete="off"/>
+    <label>Environment</label>
+    <select id="env">
+      <option value="practice">Practice (Demo) — Recommended</option>
+      <option value="live">Live — Real Money</option>
+    </select>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Strategy Settings</div>
+    <div class="row2">
+      <div><label>Fast EMA</label><input type="number" id="fast-ma" value="9" min="2" max="50"/></div>
+      <div><label>Slow EMA</label><input type="number" id="slow-ma" value="21" min="5" max="100"/></div>
+    </div>
+    <label>Trend EMA</label>
+    <input type="number" id="trend-ma" value="50" min="20" max="200"/>
+    <label>Check Interval</label>
+    <select id="interval">
+      <option value="60">Every 1 minute</option>
+      <option value="300" selected>Every 5 minutes</option>
+      <option value="900">Every 15 minutes</option>
+    </select>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Risk Management</div>
+    <label>Risk per trade (% of balance)</label>
+    <input type="number" id="risk-pct" value="1" min="0.1" max="5" step="0.1"/>
+    <div class="row2">
+      <div><label>Stop Loss (pips)</label><input type="number" id="sl-pips" value="30" min="5" max="500"/></div>
+      <div><label>Take Profit (pips)</label><input type="number" id="tp-pips" value="60" min="0" max="1000"/></div>
+    </div>
+  </div>
+
+  <div id="setup-error" class="error-msg" style="display:none"></div>
+  <button class="btn btn-gold" onclick="startBot()">▶ Start Bot</button>
+  <button class="btn btn-outline" onclick="testConnection()">🔗 Test Connection</button>
+</div>
+
+<!-- BOT SCREEN -->
+<div id="bot-screen">
+  <div class="price-hero">
+    <div class="price-label">XAU/USD · 1H</div>
+    <div class="price-value" id="live-price">—</div>
+    <div class="price-change" id="price-change">Loading...</div>
+  </div>
+
+  <div class="signal-card flat" id="signal-card">
+    <div class="signal-icon" id="signal-icon">⏳</div>
+    <div class="signal-info">
+      <div class="signal-title" id="signal-title">Analyzing...</div>
+      <div class="signal-sub" id="signal-sub">Fetching market data</div>
+    </div>
+  </div>
+
+  <div class="position-card" id="position-card" style="display:none">
+    <div class="pos-header">
+      <div class="pos-type" id="pos-type-badge">BUY</div>
+      <div class="pos-pnl" id="pos-pnl">+$0.00</div>
+    </div>
+    <div class="pos-details">
+      <div class="pos-detail"><span>Entry</span><span id="pos-entry">—</span></div>
+      <div class="pos-detail"><span>Units</span><span id="pos-units">—</span></div>
+      <div class="pos-detail"><span>Stop Loss</span><span id="pos-sl">—</span></div>
+      <div class="pos-detail"><span>Take Profit</span><span id="pos-tp">—</span></div>
+    </div>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-box"><div class="stat-label">Balance</div><div class="stat-value gold" id="stat-balance">—</div></div>
+    <div class="stat-box"><div class="stat-label">Today P&L</div><div class="stat-value" id="stat-pnl">—</div></div>
+    <div class="stat-box"><div class="stat-label">Trades Today</div><div class="stat-value" id="stat-trades">0</div></div>
+    <div class="stat-box"><div class="stat-label">Win Rate</div><div class="stat-value" id="stat-winrate">—</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Moving Averages</div>
+    <div class="ma-row"><span class="ma-name">Fast EMA (<span id="lbl-fast">9</span>)</span><span class="ma-val" id="ma-fast">—</span></div>
+    <div class="ma-row"><span class="ma-name">Slow EMA (<span id="lbl-slow">21</span>)</span><span class="ma-val" id="ma-slow">—</span></div>
+    <div class="ma-row"><span class="ma-name">Trend EMA (<span id="lbl-trend">50</span>)</span><span class="ma-val" id="ma-trend">—</span></div>
+    <div class="ma-row"><span class="ma-name">Crossover</span><span class="ma-val" id="ma-cross">—</span></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Activity Log</div>
+    <div id="trade-log"><div style="color:var(--muted);font-size:13px;">No activity yet.</div></div>
+  </div>
+
+  <div class="next-check" id="next-check">Next check in —</div>
+  <div style="height:10px"></div>
+  <button class="btn btn-red" onclick="stopBot()">⏹ Stop Bot</button>
+</div>
+
+<script>
+// ─── PWA: Service Worker ──────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js')
+      .then(r => console.log('SW registered:', r.scope))
+      .catch(e => console.log('SW failed:', e));
+  });
+}
+
+// ─── PWA: Install prompt ──────────────────────────────────────────
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredPrompt = e;
+  document.getElementById('install-banner').style.display = 'flex';
+});
+window.addEventListener('appinstalled', () => {
+  document.getElementById('install-banner').style.display = 'none';
+  deferredPrompt = null;
+});
+async function installApp() {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  const { outcome } = await deferredPrompt.userChoice;
+  if (outcome === 'accepted') document.getElementById('install-banner').style.display = 'none';
+  deferredPrompt = null;
+}
+
+// ─── Splash ───────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  const prog = document.getElementById('splash-prog');
+  let p = 0;
+  const t = setInterval(() => {
+    p += Math.random() * 30;
+    prog.style.width = Math.min(p, 95) + '%';
+    if (p >= 95) clearInterval(t);
+  }, 150);
+  setTimeout(() => {
+    prog.style.width = '100%';
+    setTimeout(() => {
+      document.getElementById('splash').classList.add('hidden');
+      loadSavedSettings();
+    }, 400);
+  }, 1200);
+});
+
+// ─── Notifications ────────────────────────────────────────────────
+let notifEnabled = false;
+async function toggleNotifications() {
+  if (!('Notification' in window)) { alert('Notifications not supported in this browser.'); return; }
+  if (notifEnabled) {
+    notifEnabled = false;
+    document.getElementById('notif-btn').classList.remove('on');
+    return;
+  }
+  const perm = await Notification.requestPermission();
+  if (perm === 'granted') {
+    notifEnabled = true;
+    document.getElementById('notif-btn').classList.add('on');
+    new Notification('GoldBot', { body: 'Trade signal notifications enabled ✓', icon: 'icons/icon-192.svg' });
+  }
+}
+function sendNotification(title, body) {
+  if (!notifEnabled || Notification.permission !== 'granted') return;
+  new Notification(title, { body, icon: 'icons/icon-192.svg', badge: 'icons/icon-72.svg', vibrate: [200,100,200] });
+}
+
+// ─── Settings persistence ─────────────────────────────────────────
+function saveSettings() {
+  const s = {
+    apiKey: document.getElementById('api-key').value,
+    accountId: document.getElementById('account-id').value,
+    env: document.getElementById('env').value,
+    fastMa: document.getElementById('fast-ma').value,
+    slowMa: document.getElementById('slow-ma').value,
+    trendMa: document.getElementById('trend-ma').value,
+    interval: document.getElementById('interval').value,
+    riskPct: document.getElementById('risk-pct').value,
+    slPips: document.getElementById('sl-pips').value,
+    tpPips: document.getElementById('tp-pips').value,
+  };
+  try { localStorage.setItem('goldbot_settings', JSON.stringify(s)); } catch(e){}
+}
+function loadSavedSettings() {
+  try {
+    const raw = localStorage.getItem('goldbot_settings');
+    if (!raw) return;
+    const s = JSON.parse(raw);
+    if (s.apiKey)     document.getElementById('api-key').value    = s.apiKey;
+    if (s.accountId)  document.getElementById('account-id').value = s.accountId;
+    if (s.env)        document.getElementById('env').value        = s.env;
+    if (s.fastMa)     document.getElementById('fast-ma').value    = s.fastMa;
+    if (s.slowMa)     document.getElementById('slow-ma').value    = s.slowMa;
+    if (s.trendMa)    document.getElementById('trend-ma').value   = s.trendMa;
+    if (s.interval)   document.getElementById('interval').value   = s.interval;
+    if (s.riskPct)    document.getElementById('risk-pct').value   = s.riskPct;
+    if (s.slPips)     document.getElementById('sl-pips').value    = s.slPips;
+    if (s.tpPips)     document.getElementById('tp-pips').value    = s.tpPips;
+    if (s.apiKey || s.accountId) document.getElementById('saved-indicator').style.display = '';
+  } catch(e){}
+}
+
+// ─── Config & State ───────────────────────────────────────────────
+let cfg = {};
+let botTimer = null, countdownTimer = null;
+let nextCheckIn = 0;
+let sessionTrades = 0, sessionWins = 0, sessionStartBalance = 0;
+let lastPrice = null, logEntries = [];
+
+// ─── OANDA API ────────────────────────────────────────────────────
+function oandaBase() {
+  return cfg.env === 'live' ? 'https://api-fxtrade.oanda.com' : 'https://api-fxpractice.oanda.com';
+}
+async function oandaFetch(path, opts = {}) {
+  const res = await fetch(oandaBase() + path, {
+    ...opts,
+    headers: { 'Authorization': `Bearer ${cfg.apiKey}`, 'Content-Type': 'application/json', ...(opts.headers||{}) }
+  });
+  if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.errorMessage || `HTTP ${res.status}`); }
+  return res.json();
+}
+
+// ─── EMA ─────────────────────────────────────────────────────────
+function calcEMA(prices, period) {
+  if (prices.length < period) return null;
+  const k = 2 / (period + 1);
+  let ema = prices.slice(0, period).reduce((a,b) => a+b, 0) / period;
+  for (let i = period; i < prices.length; i++) ema = prices[i]*k + ema*(1-k);
+  return ema;
+}
+
+// ─── Market data ──────────────────────────────────────────────────
+async function fetchMAs() {
+  const count = cfg.trendPeriod + 10;
+  const data = await oandaFetch(`/v3/instruments/XAU_USD/candles?granularity=H1&count=${count}&price=M`);
+  const closes = data.candles.filter(c => c.complete).map(c => parseFloat(c.mid.c));
+  const prev = closes.slice(0, -1);
+  return {
+    fast: calcEMA(closes, cfg.fastPeriod), slow: calcEMA(closes, cfg.slowPeriod),
+    trend: calcEMA(closes, cfg.trendPeriod),
+    fastPrev: calcEMA(prev, cfg.fastPeriod), slowPrev: calcEMA(prev, cfg.slowPeriod),
+    currentPrice: closes[closes.length-1]
+  };
+}
+async function fetchPrice() {
+  const data = await oandaFetch(`/v3/accounts/${cfg.accountId}/pricing?instruments=XAU_USD`);
+  const p = data.prices[0];
+  return { bid: parseFloat(p.bids[0].price), ask: parseFloat(p.asks[0].price), mid: (parseFloat(p.bids[0].price)+parseFloat(p.asks[0].price))/2 };
+}
+async function fetchAccount() {
+  const data = await oandaFetch(`/v3/accounts/${cfg.accountId}/summary`);
+  return { balance: parseFloat(data.account.balance), unrealizedPL: parseFloat(data.account.unrealizedPL), currency: data.account.currency };
+}
+async function fetchOpenPositions() {
+  const data = await oandaFetch(`/v3/accounts/${cfg.accountId}/openTrades`);
+  return data.trades.filter(t => t.instrument === 'XAU_USD');
+}
+
+// ─── Trading ──────────────────────────────────────────────────────
+function calcUnits(balance, slPips, direction) {
+  const pipValue = 0.01;
+  const riskAmount = balance * cfg.riskPct / 100;
+  let units = Math.floor(riskAmount / (slPips * pipValue));
+  units = Math.max(1, Math.min(units, 100000));
+  return direction === 'buy' ? units : -units;
+}
+async function placeOrder(direction, price) {
+  const acct = await fetchAccount();
+  const pip = 0.01;
+  const sl = direction === 'buy' ? (price.ask - cfg.slPips*pip).toFixed(3) : (price.bid + cfg.slPips*pip).toFixed(3);
+  const tp = cfg.tpPips > 0 ? (direction === 'buy' ? (price.ask + cfg.tpPips*pip).toFixed(3) : (price.bid - cfg.tpPips*pip).toFixed(3)) : null;
+  const units = calcUnits(acct.balance, cfg.slPips, direction);
+  const order = { order: { type:'MARKET', instrument:'XAU_USD', units:String(units),
+    stopLossOnFill:{price:sl,timeInForce:'GTC'},
+    ...(tp ? {takeProfitOnFill:{price:tp,timeInForce:'GTC'}} : {})
+  }};
+  await oandaFetch(`/v3/accounts/${cfg.accountId}/orders`, { method:'POST', body:JSON.stringify(order) });
+  return { units, entryPrice: direction==='buy' ? price.ask : price.bid, sl, tp };
+}
+async function closeAllPositions() {
+  const trades = await fetchOpenPositions();
+  for (const t of trades) await oandaFetch(`/v3/accounts/${cfg.accountId}/trades/${t.id}/close`, {method:'PUT',body:'{"units":"ALL"}'});
+}
+
+// ─── Bot cycle ────────────────────────────────────────────────────
+async function runBotCycle() {
+  try {
+    const [mas, price, acct, openTrades] = await Promise.all([fetchMAs(), fetchPrice(), fetchAccount(), fetchOpenPositions()]);
+    const { fast, slow, trend, fastPrev, slowPrev, currentPrice } = mas;
+
+    // Price
+    const mid = price.mid;
+    document.getElementById('live-price').textContent = mid.toFixed(2);
+    const changeEl = document.getElementById('price-change');
+    if (lastPrice !== null) {
+      const diff = mid - lastPrice, pct = diff/lastPrice*100;
+      changeEl.textContent = `${diff>=0?'+':''}${diff.toFixed(2)} (${pct.toFixed(3)}%)`;
+      changeEl.className = 'price-change ' + (diff>=0?'up':'down');
+    }
+    lastPrice = mid;
+
+    // MAs
+    document.getElementById('ma-fast').textContent  = fast  ? fast.toFixed(2)  : '—';
+    document.getElementById('ma-slow').textContent  = slow  ? slow.toFixed(2)  : '—';
+    document.getElementById('ma-trend').textContent = trend ? trend.toFixed(2) : '—';
+    if (fast && slow) {
+      const cx = document.getElementById('ma-cross');
+      if (fast > slow) { cx.textContent='Fast > Slow ↑'; cx.style.color='var(--green)'; }
+      else             { cx.textContent='Fast < Slow ↓'; cx.style.color='var(--red)'; }
+    }
+
+    // Account
+    document.getElementById('stat-balance').textContent = '$'+acct.balance.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+    // Open position
+    const posCard = document.getElementById('position-card');
+    if (openTrades.length > 0) {
+      const t = openTrades[0]; const isLong = parseFloat(t.currentUnits) > 0;
+      posCard.style.display = '';
+      document.getElementById('pos-type-badge').textContent = isLong?'BUY':'SELL';
+      document.getElementById('pos-type-badge').className = 'pos-type '+(isLong?'buy':'sell');
+      const pl = parseFloat(t.unrealizedPL);
+      document.getElementById('pos-pnl').textContent = (pl>=0?'+':'')+'$'+pl.toFixed(2);
+      document.getElementById('pos-pnl').style.color = pl>=0?'var(--green)':'var(--red)';
+      document.getElementById('pos-entry').textContent = parseFloat(t.price).toFixed(2);
+      document.getElementById('pos-units').textContent = Math.abs(parseFloat(t.currentUnits));
+      document.getElementById('pos-sl').textContent = t.stopLossOrder ? parseFloat(t.stopLossOrder.price).toFixed(2) : '—';
+      document.getElementById('pos-tp').textContent = t.takeProfitOrder ? parseFloat(t.takeProfitOrder.price).toFixed(2) : '—';
+    } else { posCard.style.display = 'none'; }
+
+    // Signal
+    const bullishCross = fastPrev <= slowPrev && fast > slow;
+    const bearishCross = fastPrev >= slowPrev && fast < slow;
+    const upTrend = currentPrice > trend, downTrend = currentPrice < trend;
+    const hasLong  = openTrades.some(t => parseFloat(t.currentUnits) > 0);
+    const hasShort = openTrades.some(t => parseFloat(t.currentUnits) < 0);
+    const sigCard = document.getElementById('signal-card');
+    const sigIcon = document.getElementById('signal-icon');
+    const sigTitle = document.getElementById('signal-title');
+    const sigSub = document.getElementById('signal-sub');
+
+    if (bullishCross && upTrend && !hasLong) {
+      sigCard.className='signal-card buy'; sigIcon.textContent='📈'; sigTitle.textContent='BUY Signal';
+      sigSub.textContent='Fast EMA crossed above Slow EMA — uptrend confirmed';
+      if (hasShort) { await closeAllPositions(); addLog('Closed SHORT — signal reversed','info'); }
+      const order = await placeOrder('buy', price);
+      sessionTrades++; document.getElementById('stat-trades').textContent = sessionTrades;
+      addLog(`BUY ${Math.abs(order.units)} units @ ${order.entryPrice.toFixed(2)} | SL:${order.sl} TP:${order.tp||'—'}`, 'buy');
+      sendNotification('🟢 GoldBot — BUY Signal', `XAU/USD @ ${order.entryPrice.toFixed(2)} | SL:${order.sl}`);
+    } else if (bearishCross && downTrend && !hasShort) {
+      sigCard.className='signal-card sell'; sigIcon.textContent='📉'; sigTitle.textContent='SELL Signal';
+      sigSub.textContent='Fast EMA crossed below Slow EMA — downtrend confirmed';
+      if (hasLong) { await closeAllPositions(); addLog('Closed LONG — signal reversed','info'); }
+      const order = await placeOrder('sell', price);
+      sessionTrades++; document.getElementById('stat-trades').textContent = sessionTrades;
+      addLog(`SELL ${Math.abs(order.units)} units @ ${order.entryPrice.toFixed(2)} | SL:${order.sl} TP:${order.tp||'—'}`, 'sell');
+      sendNotification('🔴 GoldBot — SELL Signal', `XAU/USD @ ${order.entryPrice.toFixed(2)} | SL:${order.sl}`);
+    } else {
+      if (hasLong)       { sigCard.className='signal-card buy';  sigIcon.textContent='🟢'; sigTitle.textContent='Holding BUY';  sigSub.textContent='Trend intact — no action'; }
+      else if (hasShort) { sigCard.className='signal-card sell'; sigIcon.textContent='🔴'; sigTitle.textContent='Holding SELL'; sigSub.textContent='Trend intact — no action'; }
+      else               { sigCard.className='signal-card flat'; sigIcon.textContent='⏸'; sigTitle.textContent='No Signal';    sigSub.textContent='Waiting for MA crossover + trend filter'; }
+    }
+
+    // P&L
+    const todayPL = acct.balance - sessionStartBalance + acct.unrealizedPL;
+    const plEl = document.getElementById('stat-pnl');
+    plEl.textContent = (todayPL>=0?'+':'')+'$'+todayPL.toFixed(2);
+    plEl.className = 'stat-value '+(todayPL>=0?'green':'red');
+    document.getElementById('stat-winrate').textContent = sessionTrades>0 ? Math.round(sessionWins/sessionTrades*100)+'%' : '—';
+  } catch(err) {
+    addLog('Error: '+err.message, 'info');
+    console.error(err);
+  }
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────
+function addLog(text, type) {
+  const time = new Date().toTimeString().slice(0,5);
+  logEntries.unshift({text,type,time});
+  if (logEntries.length > 30) logEntries.pop();
+  document.getElementById('trade-log').innerHTML = logEntries.map(e =>
+    `<div class="log-entry"><div class="log-dot ${e.type}"></div><div class="log-text">${e.text}</div><div class="log-time">${e.time}</div></div>`
+  ).join('');
+}
+function startCountdown(seconds) {
+  if (countdownTimer) clearInterval(countdownTimer);
+  nextCheckIn = seconds;
+  const el = document.getElementById('next-check');
+  countdownTimer = setInterval(() => {
+    nextCheckIn--;
+    if (nextCheckIn <= 0) { el.textContent='Checking...'; clearInterval(countdownTimer); }
+    else el.textContent = `Next check in ${nextCheckIn}s`;
+  }, 1000);
+}
+
+// ─── Start / Stop ─────────────────────────────────────────────────
+async function startBot() {
+  const apiKey    = document.getElementById('api-key').value.trim();
+  const accountId = document.getElementById('account-id').value.trim();
+  const env       = document.getElementById('env').value;
+  const fastP     = parseInt(document.getElementById('fast-ma').value);
+  const slowP     = parseInt(document.getElementById('slow-ma').value);
+  const trendP    = parseInt(document.getElementById('trend-ma').value);
+  const interval  = parseInt(document.getElementById('interval').value);
+  const riskPct   = parseFloat(document.getElementById('risk-pct').value);
+  const slPips    = parseFloat(document.getElementById('sl-pips').value);
+  const tpPips    = parseFloat(document.getElementById('tp-pips').value);
+  const errEl     = document.getElementById('setup-error');
+  errEl.style.display = 'none';
+  if (!apiKey || !accountId) { errEl.textContent='Please enter your API Key and Account ID.'; errEl.style.display=''; return; }
+  if (fastP >= slowP) { errEl.textContent='Fast MA must be less than Slow MA.'; errEl.style.display=''; return; }
+  cfg = { apiKey, accountId, env, fastPeriod:fastP, slowPeriod:slowP, trendPeriod:trendP, interval, riskPct, slPips, tpPips };
+  try {
+    const acct = await fetchAccount();
+    sessionStartBalance = acct.balance;
+  } catch(e) { errEl.textContent='Connection failed: '+e.message; errEl.style.display=''; return; }
+  saveSettings();
+  document.getElementById('lbl-fast').textContent  = fastP;
+  document.getElementById('lbl-slow').textContent  = slowP;
+  document.getElementById('lbl-trend').textContent = trendP;
+  document.getElementById('setup-screen').style.display = 'none';
+  document.getElementById('bot-screen').style.display   = '';
+  document.getElementById('hdr-status').textContent = 'RUNNING';
+  document.getElementById('hdr-status').className   = 'status-badge running';
+  addLog(`Bot started — XAU/USD H1 | EMA ${fastP}/${slowP}/${trendP} | Risk ${riskPct}%`, 'info');
+  await runBotCycle();
+  startCountdown(interval);
+  botTimer = setInterval(async () => { await runBotCycle(); startCountdown(interval); }, interval * 1000);
+}
+async function testConnection() {
+  const apiKey    = document.getElementById('api-key').value.trim();
+  const accountId = document.getElementById('account-id').value.trim();
+  const env       = document.getElementById('env').value;
+  const errEl     = document.getElementById('setup-error');
+  errEl.style.cssText = '';
+  errEl.style.display = 'none';
+  if (!apiKey || !accountId) { errEl.textContent='Enter API Key and Account ID first.'; errEl.style.display=''; return; }
+  cfg = { apiKey, accountId, env };
+  try {
+    const acct = await fetchAccount();
+    errEl.style.cssText = 'background:rgba(46,204,113,.1);border-color:rgba(46,204,113,.3);color:var(--green);';
+    errEl.textContent = `✅ Connected! Balance: $${parseFloat(acct.balance).toFixed(2)} ${acct.currency}`;
+    errEl.style.display = '';
+    setTimeout(() => { errEl.style.cssText=''; errEl.style.display='none'; }, 5000);
+  } catch(e) { errEl.textContent='❌ Failed: '+e.message; errEl.style.display=''; }
+}
+function stopBot() {
+  if (botTimer)       { clearInterval(botTimer);       botTimer=null; }
+  if (countdownTimer) { clearInterval(countdownTimer); countdownTimer=null; }
+  document.getElementById('setup-screen').style.display = '';
+  document.getElementById('bot-screen').style.display   = 'none';
+  document.getElementById('hdr-status').textContent = 'SETUP';
+  document.getElementById('hdr-status').className   = 'status-badge';
+  logEntries=[]; lastPrice=null; sessionTrades=0; sessionWins=0;
+}
+</script>
+</body>
+</html>
